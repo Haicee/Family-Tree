@@ -1,30 +1,55 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
+import 'package:drift/native.dart';
+import 'package:family_tree/core/database/database.dart';
+import 'package:family_tree/features/trees/data/tree_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:family_tree/main.dart';
-
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  late AppDatabase db;
+  late TreeRepository repo;
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  setUp(() {
+    db = AppDatabase.forTesting(NativeDatabase.memory());
+    repo = TreeRepository(db);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  tearDown(() async {
+    await db.close();
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  group('TreeRepository', () {
+    test('creates and reads back a tree', () async {
+      final id = await repo.createTree(name: 'Santos', description: 'Main');
+      final tree = await repo.getTree(id);
+
+      expect(tree.name, 'Santos');
+      expect(tree.description, 'Main');
+    });
+
+    test('watchTrees returns all created trees', () async {
+      await repo.createTree(name: 'First');
+      await repo.createTree(name: 'Second');
+
+      final trees = await repo.watchTrees().first;
+
+      expect(trees.length, 2);
+      expect(trees.map((t) => t.name), containsAll(['First', 'Second']));
+    });
+
+    test('updateTree changes the name', () async {
+      final id = await repo.createTree(name: 'Old');
+      await repo.updateTree(id, name: 'New', description: null);
+
+      final tree = await repo.getTree(id);
+      expect(tree.name, 'New');
+      expect(tree.description, isNull);
+    });
+
+    test('deleteTree removes the tree', () async {
+      final id = await repo.createTree(name: 'Temp');
+      await repo.deleteTree(id);
+
+      final trees = await repo.watchTrees().first;
+      expect(trees, isEmpty);
+    });
   });
 }
